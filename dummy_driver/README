@@ -1,21 +1,106 @@
-# Dummy driver sample
+# Driver de température simulé — TP Zephyr
 
-> [!WARNING]
-> Ce dossier est a cloner dans un workspace Zephyr
+Ce module implémente un capteur fictif utilisant l'API Read and Decode de
+Zephyr et RTIO. Aucun capteur matériel n'est nécessaire : chaque lecture
+renvoie une température, puis prépare la suivante sans dépasser le maximum.
 
-## Run
+## Modifications réalisées
+
+support only the temp channel
+https://docs.zephyrproject.org/latest/doxygen/html/group__sensor__interface.html#gaaa1b502bc029b10d7b23b0a25ef4e934
+
+
+### Driver : `driver/my_sensor.c`
+
+- Complétion de `my_sensor_channel_supported()` : seul le canal
+  `SENSOR_CHAN_AMBIENT_TEMP` d'indice `0` est accepté.
+- Complétion de `my_sensor_submit()` : récupération de la température courante
+  dans `data->next_mc`, puis préparation de la suivante en ajoutant
+  `CONFIG_MY_SENSOR_STEP_MC`. La prochaine valeur est plafonnée à
+  `cfg->maximum_mc`.
+- Complétion de `my_sensor_decode()` : lecture du timestamp et de la température
+  depuis le buffer, remplissage de `sensor_q31_data` et conversion en Q31 avec
+  un calcul intermédiaire sur 64 bits.
+- Renseignement des pointeurs `get_frame_count`, `get_size_info` et `decode`
+  dans `my_sensor_decoder`.
+- Complétion de `my_sensor_get_decoder()` pour fournir l'adresse du décodeur.
+- Renseignement des pointeurs `submit` et `get_decoder` dans `my_sensor_api`.
+- Complétion de `MY_SENSOR_DEFINE(inst)` : les propriétés Devicetree alimentent
+  les champs `initial_mc` et `maximum_mc` via `DT_INST_PROP()`.
+
+Chaque buffer encode une seule mesure sur 12 octets :
+
+| Octets | Contenu | Encodage |
+| --- | --- | --- |
+| 0 à 7 | Timestamp en nanosecondes | Entier 64 bits, little-endian |
+| 8 à 11 | Température en millicelsius | Entier 32 bits, little-endian |
+
+Le décodeur indique une mesure (`reading_count = 1`), un décalage temporel nul
+(`timestamp_delta = 0`) et utilise `MY_SENSOR_Q31_SHIFT = 7` :
+
+```text
+valeur Q31 = température en millicelsius × 2^24 / 1000
+température en °C = valeur Q31 / 2^24
 ```
+
+`*fit = 1` marque la mesure comme consommée ; la fonction retourne `1` pour
+indiquer qu'une mesure a été décodée.
+
+### Binding Devicetree : `dts/bindings/sensor/zephyr,tp-sensor.yaml`
+
+- Définition du compatible `zephyr,tp-sensor`.
+- Inclusion du binding commun `sensor-device.yaml`.
+- Déclaration de `initial-millicelsius` et `maximum-millicelsius`, de type
+  entier, avec une valeur par défaut de `0`.
+- Ajout des descriptions des deux propriétés.
+
+### Activation du driver : `Kconfig`
+
+L'option `MY_SENSOR` a été complétée avec :
+
+```kconfig
+default y
+depends on DT_HAS_ZEPHYR_TP_SENSOR_ENABLED
+```
+
+Le driver est donc activé par défaut lorsqu'une instance compatible est
+présente avec `status = "okay"` dans le Devicetree.
+
+L'option existante `MY_SENSOR_STEP_MC` règle l'incrément entre deux lectures :
+de `0` à `10000` millicelsius, avec une valeur par défaut de `250`.
+
+### Configuration du sample : `sample/prj.conf`
+
+Ajout de `CONFIG_SENSOR_ASYNC_API=y` pour activer l'API asynchrone des capteurs. La configuration actuelle est :
+
+```ini
+CONFIG_SENSOR=y
+CONFIG_SENSOR_ASYNC_API=y
+CONFIG_MY_SENSOR_STEP_MC=250
+```
+
+## Fonctionnement du sample
+
+Les fichiers de support déjà présents relient le module au sample :
+
+- `zephyr/module.yml` expose CMake, Kconfig et la racine Devicetree du module.
+- `CMakeLists.txt` compile le driver lorsque `CONFIG_MY_SENSOR` est actif.
+- `sample/CMakeLists.txt` ajoute le module à `EXTRA_ZEPHYR_MODULES`.
+- `sample/app.overlay` déclare le capteur `my_sensor`, avec une température
+  initiale de `23000` millicelsius (23 °C) et un maximum de `25000` (25 °C).
+- `sample/src/main.c` vérifie que le périphérique est prêt, récupère son
+  décodeur, puis effectue cinq lectures avec `sensor_read()` et `sensor_decode()`.
+  Les lectures sont espacées par une attente de 10 secondes.
+
+Avec un incrément de 250 millicelsius (0,25 °C), les températures attendues sont :
+
+```text
+23 ; 23,25 ; 23,50 ; 23,75 ; 24 °C
+```
+
+## Compilation et exécution
+
+```sh
 west build -p always -b qemu_x86 sample
 west build -t run
 ```
-
-## Check the behavior
-```
-west twister -T sample -p qemu_x86/atom --inline-logs
-```
-
-## Tasks to complete
-- Complete the Kconfig
-- Complete the dts bindings
-- Complete the driver code
-- Run the test and validate

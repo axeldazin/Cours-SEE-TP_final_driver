@@ -1,1 +1,11 @@
-// TODO
+menuconfig MY_SENSOR
+    bool "Capteur de temperature bosh bme 280"
+
+    default y
+    depends on SENSOR && I2C
+    depends on DT_HAS_BOCSH_BME280_ENABLED
+    select SENSOR_ASYNC_API
+
+    help
+      Active le driver I2C du BME280 utilisant Read and Decode
+      pour la temperature, la pression et lhumidite.

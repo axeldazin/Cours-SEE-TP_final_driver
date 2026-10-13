@@ -1,4 +1,4 @@
-#define DT_DRV_COMPAT /* TODO */
+#define DT_DRV_COMPAT bocsh_bme280
 
 // TODO : toutes les fonctions ne sont pas notées. il manque les fonctions de
 // - recuperation des parametres de compensation
@@ -23,6 +23,10 @@ LOG_MODULE_REGISTER(MYSENSOR, CONFIG_SENSOR_LOG_LEVEL);
 static inline int mysensor_bus_check(const struct device *dev)
 {
 	/* TODO : vérifier que le bus I2C est prêt. */
+	if (!device_is_ready(dev->i2c)) {
+		printk("\n");
+		return -ENODEV;
+	}
 	return -ENOSYS;
 }
 

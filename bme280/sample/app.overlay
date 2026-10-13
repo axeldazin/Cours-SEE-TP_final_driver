@@ -1,0 +1,6 @@
+/ {
+    my_sensor: bme280 {
+        compatible = "bocsh,bme280";
+        status = "okay";
+    };
+};
